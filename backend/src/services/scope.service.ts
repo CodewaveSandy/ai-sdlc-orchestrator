@@ -19,7 +19,7 @@ import AgentRunModel, {
 } from "../models/agent-run.model";
 import type { ScopeWorkflowState } from "../types/scope.types";
 import { AppError } from "../utils/app-error";
-import { completeProductDiscovery, getProjectById } from "./project.service";
+import { getProjectById } from "./project.service";
 
 const createScopeWorkflowState = (
   agentRun: AgentRunDocument,
@@ -297,7 +297,7 @@ export const reviseProjectScope = async (
   }
 };
 
-export const approveProjectScope = async (
+export const approveProjectScopeRun = async (
   projectId: string,
   agentRunId: string,
 ): Promise<ScopeWorkflowState> => {
@@ -332,8 +332,6 @@ export const approveProjectScope = async (
   scopeRun.completedAt = new Date();
 
   await scopeRun.save();
-
-  await completeProductDiscovery(projectId);
 
   return createScopeWorkflowState(scopeRun);
 };

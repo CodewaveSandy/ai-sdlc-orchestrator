@@ -1,30 +1,59 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import PendingStage from "@/components/projects/PendingStage";
 import PoWorkflowPanel from "@/components/projects/PoWorkflowPanel";
+import ProjectStageStepper from "@/components/projects/ProjectStageStepper";
 import ProjectStatusBadge from "@/components/projects/ProjectStatusBadge";
+import ProjectWorkflowStatus from "@/components/projects/ProjectWorkflowStatus";
 import ScopeReviewPanel from "@/components/projects/ScopeReviewPanel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPoWorkflowState } from "@/services/po.service";
 import { getProjectById } from "@/services/project.service";
 import { getProjectScopeState } from "@/services/scope.service";
 import type { PoWorkflowState } from "@/types/po.types";
-import type { Project } from "@/types/project.types";
+import type { Project, ProjectStage } from "@/types/project.types";
 import type { ScopeWorkflowState } from "@/types/scope.types";
+import type {
+  WorkspaceStep,
+  WorkspaceStepId,
+  WorkspaceStepStatus,
+} from "@/types/workflow.types";
 
-const formatStage = (stage: string): string =>
-  stage
-    .toLowerCase()
-    .split("_")
-    .map((word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`)
-    .join(" ");
+const stageOrder: ProjectStage[] = [
+  "REQUIREMENT",
+  "PRODUCT_DISCOVERY",
+  "ARCHITECTURE",
+  "DEVELOPMENT",
+  "QA",
+  "DEPLOYMENT",
+  "COMPLETED",
+];
 
-const formatDate = (value: string): string =>
-  new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+const getStageIndex = (stage: ProjectStage): number =>
+  stageOrder.indexOf(stage);
+
+const getAgentStatus = (
+  status: PoWorkflowState["status"] | ScopeWorkflowState["status"] | undefined,
+): WorkspaceStepStatus => {
+  switch (status) {
+    case "COMPLETED":
+      return "COMPLETED";
+
+    case "RUNNING":
+    case "CREATED":
+      return "RUNNING";
+
+    case "WAITING_FOR_HUMAN":
+      return "WAITING_FOR_HUMAN";
+
+    case "FAILED":
+      return "FAILED";
+
+    default:
+      return "PENDING";
+  }
+};
 
 const ProjectDetailsPage = () => {
   const { projectId } = useParams<{
@@ -39,9 +68,29 @@ const ProjectDetailsPage = () => {
 
   const [scopeState, setScopeState] = useState<ScopeWorkflowState | null>(null);
 
+  const [selectedStepId, setSelectedStepId] = useState<WorkspaceStepId | null>(
+    null,
+  );
+
   const [isLoading, setIsLoading] = useState(true);
 
   const [error, setError] = useState<string | null>(null);
+
+  const refreshWorkspace = async (): Promise<void> => {
+    if (!projectId) {
+      return;
+    }
+
+    const [projectData, workflowState, productScopeState] = await Promise.all([
+      getProjectById(projectId),
+      getPoWorkflowState(projectId),
+      getProjectScopeState(projectId),
+    ]);
+
+    setProject(projectData);
+    setPoState(workflowState);
+    setScopeState(productScopeState);
+  };
 
   useEffect(() => {
     const loadWorkspace = async (): Promise<void> => {
@@ -57,16 +106,7 @@ const ProjectDetailsPage = () => {
         setIsLoading(true);
         setError(null);
 
-        const [projectData, workflowState, productScopeState] =
-          await Promise.all([
-            getProjectById(projectId),
-            getPoWorkflowState(projectId),
-            getProjectScopeState(projectId),
-          ]);
-
-        setProject(projectData);
-        setPoState(workflowState);
-        setScopeState(productScopeState);
+        await refreshWorkspace();
       } catch (loadError) {
         setError(
           loadError instanceof Error
@@ -81,18 +121,217 @@ const ProjectDetailsPage = () => {
     void loadWorkspace();
   }, [projectId]);
 
+  const steps = useMemo<WorkspaceStep[]>(() => {
+    if (!project) {
+      return [];
+    }
+
+    const currentStageIndex = getStageIndex(project.currentStage);
+
+    const requirementStatus = getAgentStatus(poState?.status);
+
+    const scopeStatus = getAgentStatus(scopeState?.status);
+
+    const getFutureStageStatus = (stage: ProjectStage): WorkspaceStepStatus => {
+      const index = getStageIndex(stage);
+
+      if (currentStageIndex > index) {
+        return "COMPLETED";
+      }
+
+      if (project.currentStage !== stage) {
+        return "PENDING";
+      }
+
+      switch (project.workflowStatus) {
+        case "RUNNING":
+          return "RUNNING";
+
+        case "WAITING_FOR_HUMAN":
+          return "WAITING_FOR_HUMAN";
+
+        case "FAILED":
+          return "FAILED";
+
+        default:
+          return "CURRENT";
+      }
+    };
+
+    return [
+      {
+        id: "REQUIREMENT_DISCOVERY",
+        number: "01",
+        title: "Requirement Discovery",
+        subtitle: "Product Owner Agent",
+        status: requirementStatus,
+      },
+
+      {
+        id: "PRODUCT_SCOPE",
+        number: "02",
+        title: "Product Scope",
+        subtitle: "Product Owner Agent",
+        status:
+          scopeState === null &&
+          poState?.status === "COMPLETED" &&
+          project.workflowStatus === "RUNNING"
+            ? "RUNNING"
+            : scopeStatus,
+      },
+
+      {
+        id: "ARCHITECTURE",
+        number: "03",
+        title: "Architecture",
+        subtitle: "Architect Agent",
+        status: getFutureStageStatus("ARCHITECTURE"),
+      },
+
+      {
+        id: "DEVELOPMENT",
+        number: "04",
+        title: "Development",
+        subtitle: "Developer Agent",
+        status: getFutureStageStatus("DEVELOPMENT"),
+      },
+
+      {
+        id: "QA",
+        number: "05",
+        title: "Quality Assurance",
+        subtitle: "QA Agent",
+        status: getFutureStageStatus("QA"),
+      },
+
+      {
+        id: "DEPLOYMENT",
+        number: "06",
+        title: "Deployment",
+        subtitle: "DevOps Agent",
+        status: getFutureStageStatus("DEPLOYMENT"),
+      },
+    ];
+  }, [poState, project, scopeState]);
+
+  const activeStepId = useMemo<WorkspaceStepId>(() => {
+    if (selectedStepId) {
+      return selectedStepId;
+    }
+
+    const attentionStep = steps.find(
+      (step) => step.status === "WAITING_FOR_HUMAN" || step.status === "FAILED",
+    );
+
+    if (attentionStep) {
+      return attentionStep.id;
+    }
+
+    const runningStep = steps.find(
+      (step) => step.status === "RUNNING" || step.status === "CURRENT",
+    );
+
+    if (runningStep) {
+      return runningStep.id;
+    }
+
+    return (
+      [...steps].reverse().find((step) => step.status === "COMPLETED")?.id ??
+      "REQUIREMENT_DISCOVERY"
+    );
+  }, [selectedStepId, steps]);
+
+  const handlePoStateChanged = async (
+    state: PoWorkflowState,
+  ): Promise<void> => {
+    setPoState(state);
+
+    /*
+     * READY_FOR_SCOPE now causes backend
+     * orchestration to generate scope
+     * automatically before the request
+     * completes.
+     */
+    if (state.status === "COMPLETED") {
+      await refreshWorkspace();
+
+      setSelectedStepId("PRODUCT_SCOPE");
+    }
+  };
+
+  const handleScopeChanged = (state: ScopeWorkflowState): void => {
+    setScopeState(state);
+  };
+
   const handleScopeApproved = async (
     state: ScopeWorkflowState,
   ): Promise<void> => {
     setScopeState(state);
 
-    if (!projectId) {
-      return;
+    await refreshWorkspace();
+
+    setSelectedStepId("ARCHITECTURE");
+  };
+
+  const renderSelectedStage = () => {
+    switch (activeStepId) {
+      case "REQUIREMENT_DISCOVERY":
+        return (
+          <PoWorkflowPanel
+            project={project!}
+            state={poState}
+            onStateChanged={(state) => void handlePoStateChanged(state)}
+          />
+        );
+
+      case "PRODUCT_SCOPE":
+        return (
+          <ScopeReviewPanel
+            project={project!}
+            poState={poState}
+            scopeState={scopeState}
+            onScopeChanged={handleScopeChanged}
+            onScopeApproved={handleScopeApproved}
+          />
+        );
+
+      case "ARCHITECTURE":
+        return (
+          <div className="py-12">
+            <div className="max-w-2xl">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-300">
+                Architecture
+              </p>
+
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+                Architect Agent
+              </h2>
+
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                Product scope has been approved. The next milestone will add the
+                Architect Agent, which will start automatically and pause only
+                when its architecture proposal requires human approval.
+              </p>
+
+              <div className="mt-6 rounded-xl border border-dashed border-indigo-400/15 bg-indigo-500/[0.025] p-5 text-sm text-muted-foreground">
+                Architect Agent implementation is next.
+              </div>
+            </div>
+          </div>
+        );
+
+      case "DEVELOPMENT":
+        return <PendingStage title="Development" agent="Developer Agent" />;
+
+      case "QA":
+        return <PendingStage title="Quality Assurance" agent="QA Agent" />;
+
+      case "DEPLOYMENT":
+        return <PendingStage title="Deployment" agent="DevOps Agent" />;
+
+      default:
+        return null;
     }
-
-    const refreshedProject = await getProjectById(projectId);
-
-    setProject(refreshedProject);
   };
 
   if (isLoading) {
@@ -117,18 +356,20 @@ const ProjectDetailsPage = () => {
     );
   }
 
-  return (
-    <div className="space-y-8">
-      <section>
-        <Button
-          variant="ghost"
-          className="-ml-3 mb-5"
-          onClick={() => navigate("/projects")}
-        >
-          ← Back to projects
-        </Button>
+  const selectedStep = steps.find((step) => step.id === activeStepId);
 
-        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">
+  return (
+    <div className="space-y-6">
+      <Button
+        variant="ghost"
+        className="-ml-3"
+        onClick={() => navigate("/projects")}
+      >
+        ← Back to projects
+      </Button>
+
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.018] p-6">
+        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-semibold tracking-tight">
@@ -138,141 +379,64 @@ const ProjectDetailsPage = () => {
               <ProjectStatusBadge status={project.status} />
             </div>
 
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               {project.description || "No project description provided."}
             </p>
+
+            <div className="mt-5">
+              <ProjectWorkflowStatus status={project.workflowStatus} />
+            </div>
           </div>
 
-          <div className="min-w-28 rounded-xl border border-white/5 bg-white/[0.025] p-4 text-center">
-            <p className="text-2xl font-semibold">{project.progress}%</p>
+          <div className="flex items-center gap-5">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Current stage</p>
 
-            <p className="mt-1 text-xs text-muted-foreground">Complete</p>
+              <p className="mt-1 text-sm font-medium">
+                {selectedStep?.title ?? project.currentStage}
+              </p>
+            </div>
+
+            <div className="flex size-16 flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-black/10">
+              <p className="text-xl font-semibold">{project.progress}%</p>
+
+              <p className="text-[10px] text-muted-foreground">complete</p>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card className="border-white/5 bg-white/[0.025] shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Current stage
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <p className="text-lg font-semibold">
-              {formatStage(project.currentStage)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-white/5 bg-white/[0.025] shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Created
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <p className="text-sm font-medium">
-              {formatDate(project.createdAt)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-white/5 bg-white/[0.025] shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Last updated
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <p className="text-sm font-medium">
-              {formatDate(project.updatedAt)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden border-white/5 bg-white/[0.025] shadow-none">
-        <CardHeader className="border-b border-white/5">
-          <div className="flex items-center gap-4">
-            <div className="flex size-10 items-center justify-center rounded-xl border border-indigo-400/15 bg-indigo-500/5 text-xs font-semibold text-indigo-300">
-              01
-            </div>
-
-            <div>
-              <CardTitle className="text-base">Requirement Discovery</CardTitle>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Product Owner Agent
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-7">
-          <PoWorkflowPanel
-            project={project}
-            state={poState}
-            onStateChanged={setPoState}
+      <div className="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-6">
+          <ProjectStageStepper
+            steps={steps}
+            selectedStepId={activeStepId}
+            onStepSelected={setSelectedStepId}
           />
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card className="overflow-hidden border-white/5 bg-white/[0.025] shadow-none">
-        <CardHeader className="border-b border-white/5">
-          <div className="flex items-center gap-4">
-            <div className="flex size-10 items-center justify-center rounded-xl border border-violet-400/15 bg-violet-500/5 text-xs font-semibold text-violet-300">
-              02
-            </div>
-
-            <div>
-              <CardTitle className="text-base">Product Scope</CardTitle>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Product Owner Agent · Scope Generation
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-7">
-          <ScopeReviewPanel
-            project={project}
-            poState={poState}
-            scopeState={scopeState}
-            onScopeChanged={setScopeState}
-            onScopeApproved={handleScopeApproved}
-          />
-        </CardContent>
-      </Card>
-
-      {project.currentStage === "ARCHITECTURE" ? (
-        <Card className="overflow-hidden border-indigo-400/10 bg-indigo-500/[0.025] shadow-none">
-          <CardContent className="p-7">
-            <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.018]">
+          <header className="border-b border-white/[0.06] px-6 py-5">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-300">
-                  Next stage
-                </p>
+                <p className="text-lg font-semibold">{selectedStep?.title}</p>
 
-                <h2 className="mt-2 text-xl font-semibold">Architecture</h2>
-
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Product Discovery is complete. The approved scope is ready to
-                  be handed to the Architect Agent.
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selectedStep?.subtitle}
                 </p>
               </div>
 
-              <div className="rounded-xl border border-dashed border-indigo-400/15 px-5 py-3 text-sm text-muted-foreground">
-                Architect Agent coming next
-              </div>
+              {selectedStep ? (
+                <span className="text-xs text-muted-foreground">
+                  {selectedStep.status.toLowerCase().replaceAll("_", " ")}
+                </span>
+              ) : null}
             </div>
-          </CardContent>
-        </Card>
-      ) : null}
+          </header>
+
+          <div className="p-6">{renderSelectedStage()}</div>
+        </section>
+      </div>
     </div>
   );
 };

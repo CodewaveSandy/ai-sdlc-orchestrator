@@ -17,6 +17,7 @@ import type {
   RequirementAnalysisResult,
 } from "../types/requirement.types";
 import { AppError } from "../utils/app-error";
+import { handleRequirementAnalysisOutcome } from "./orchestration.service";
 import { getProjectById, setProjectRequirement } from "./project.service";
 
 const createPoWorkflowState = (agentRun: AgentRunDocument): PoWorkflowState => {
@@ -95,26 +96,19 @@ export const submitProjectRequirement = async (
     },
   });
 
+  let result: PoAgentExecutionResult;
+
   try {
     agentRun.status = "RUNNING";
     agentRun.startedAt = new Date();
 
     await agentRun.save();
 
-    const result = await analyzeRequirement(
-      existingProject.name,
-      rawRequirement,
-    );
+    result = await analyzeRequirement(existingProject.name, rawRequirement);
 
     updateAgentRunFromResult(agentRun, result);
 
     await agentRun.save();
-
-    return {
-      agentRunId: agentRun.id,
-      status: agentRun.status,
-      analysis: result.analysis,
-    };
   } catch (error) {
     agentRun.status = "FAILED";
     agentRun.completedAt = new Date();
@@ -128,6 +122,14 @@ export const submitProjectRequirement = async (
 
     throw error;
   }
+
+  await handleRequirementAnalysisOutcome(projectId, result.analysis);
+
+  return {
+    agentRunId: agentRun.id,
+    status: agentRun.status,
+    analysis: result.analysis,
+  };
 };
 
 export const getProjectPoWorkflowState = async (
@@ -255,8 +257,10 @@ export const submitPoClarificationAnswers = async (
 
   await agentRun.save();
 
+  let result: PoAgentExecutionResult;
+
   try {
-    const result = await analyzeRequirement(
+    result = await analyzeRequirement(
       project.name,
       updatedInput.rawRequirement,
       updatedInput.clarificationRounds,
@@ -265,8 +269,6 @@ export const submitPoClarificationAnswers = async (
     updateAgentRunFromResult(agentRun, result);
 
     await agentRun.save();
-
-    return createPoWorkflowState(agentRun);
   } catch (error) {
     agentRun.status = "FAILED";
     agentRun.completedAt = new Date();
@@ -280,5 +282,9 @@ export const submitPoClarificationAnswers = async (
 
     throw error;
   }
+
+  await handleRequirementAnalysisOutcome(projectId, result.analysis);
+
+  return createPoWorkflowState(agentRun);
 };
 

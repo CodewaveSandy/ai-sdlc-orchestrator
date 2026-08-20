@@ -1,12 +1,11 @@
-import { model, Schema, type HydratedDocument, type Model } from "mongoose";
+import { model, Schema, type Model } from "mongoose";
 
 import {
   PROJECT_STAGES,
   PROJECT_STATUSES,
+  PROJECT_WORKFLOW_STATUSES,
   type Project,
 } from "../types/project.types";
-
-export type ProjectDocument = HydratedDocument<Project>;
 
 const projectSchema = new Schema<Project>(
   {
@@ -31,23 +30,33 @@ const projectSchema = new Schema<Project>(
     status: {
       type: String,
       enum: PROJECT_STATUSES,
-      default: "DRAFT",
       required: true,
+      default: "DRAFT",
+      index: true,
     },
 
     currentStage: {
       type: String,
       enum: PROJECT_STAGES,
-      default: "REQUIREMENT",
       required: true,
+      default: "REQUIREMENT",
+      index: true,
+    },
+
+    workflowStatus: {
+      type: String,
+      enum: PROJECT_WORKFLOW_STATUSES,
+      required: true,
+      default: "IDLE",
+      index: true,
     },
 
     progress: {
       type: Number,
+      required: true,
+      default: 0,
       min: 0,
       max: 100,
-      default: 0,
-      required: true,
     },
   },
   {

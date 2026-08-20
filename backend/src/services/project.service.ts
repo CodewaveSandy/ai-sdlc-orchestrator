@@ -1,7 +1,11 @@
 import mongoose from "mongoose";
 
 import ProjectModel from "../models/project.model";
-import type { CreateProjectInput, Project } from "../types/project.types";
+import type {
+  CreateProjectInput,
+  Project,
+  ProjectWorkflowStatus,
+} from "../types/project.types";
 
 export const createProject = async (
   input: CreateProjectInput,
@@ -11,6 +15,7 @@ export const createProject = async (
     description: input.description,
     status: "DRAFT",
     currentStage: "REQUIREMENT",
+    workflowStatus: "IDLE",
     progress: 0,
   });
 
@@ -47,21 +52,41 @@ export const setProjectRequirement = async (
     return null;
   }
 
-  const project = await ProjectModel.findByIdAndUpdate(
+  return ProjectModel.findByIdAndUpdate(
     projectId,
     {
       $set: {
         rawRequirement,
         status: "DISCOVERY",
         currentStage: "PRODUCT_DISCOVERY",
+        workflowStatus: "RUNNING",
       },
     },
     {
       returnDocument: "after",
     },
   ).lean();
+};
 
-  return project;
+export const setProjectWorkflowStatus = async (
+  projectId: string,
+  workflowStatus: ProjectWorkflowStatus,
+): Promise<Project | null> => {
+  if (!mongoose.isValidObjectId(projectId)) {
+    return null;
+  }
+
+  return ProjectModel.findByIdAndUpdate(
+    projectId,
+    {
+      $set: {
+        workflowStatus,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  ).lean();
 };
 
 export const completeProductDiscovery = async (
@@ -71,12 +96,13 @@ export const completeProductDiscovery = async (
     return null;
   }
 
-  const project = await ProjectModel.findByIdAndUpdate(
+  return ProjectModel.findByIdAndUpdate(
     projectId,
     {
       $set: {
         status: "IN_PROGRESS",
         currentStage: "ARCHITECTURE",
+        workflowStatus: "IDLE",
         progress: 15,
       },
     },
@@ -84,7 +110,5 @@ export const completeProductDiscovery = async (
       returnDocument: "after",
     },
   ).lean();
-
-  return project;
 };
 

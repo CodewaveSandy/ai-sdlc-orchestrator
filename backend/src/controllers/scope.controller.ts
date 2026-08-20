@@ -1,11 +1,11 @@
 import type { Request, Response } from "express";
 
 import {
-  approveProjectScope,
-  generateProjectScope,
-  getProjectScopeState,
-  reviseProjectScope,
-} from "../services/scope.service";
+  approveScopeAndContinue,
+  reviseScopeAndContinue,
+  startScopeGeneration,
+} from "../services/orchestration.service";
+import { getProjectScopeState } from "../services/scope.service";
 import type { ApproveScopeInput, ReviseScopeInput } from "../types/scope.types";
 import { AppError } from "../utils/app-error";
 
@@ -58,11 +58,12 @@ export const generateScopeController = async (
   response: Response,
 ): Promise<void> => {
   try {
-    const state = await generateProjectScope(request.params.projectId);
+    const state = await startScopeGeneration(request.params.projectId);
 
     response.status(200).json({
       success: true,
       message: "Product scope generated and ready for human review",
+
       data: {
         state,
       },
@@ -97,7 +98,7 @@ export const reviseScopeController = async (
       return;
     }
 
-    const state = await reviseProjectScope(
+    const state = await reviseScopeAndContinue(
       request.params.projectId,
       agentRunId.trim(),
       feedback.trim(),
@@ -106,6 +107,7 @@ export const reviseScopeController = async (
     response.status(200).json({
       success: true,
       message: "Product scope revised and ready for review",
+
       data: {
         state,
       },
@@ -131,7 +133,7 @@ export const approveScopeController = async (
       return;
     }
 
-    const state = await approveProjectScope(
+    const state = await approveScopeAndContinue(
       request.params.projectId,
       agentRunId.trim(),
     );
@@ -139,6 +141,7 @@ export const approveScopeController = async (
     response.status(200).json({
       success: true,
       message: "Product scope approved",
+
       data: {
         state,
       },

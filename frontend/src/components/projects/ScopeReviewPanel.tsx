@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   approveProjectScope,
-  generateProjectScope,
   reviseProjectScope,
 } from "@/services/scope.service";
 import type { PoWorkflowState } from "@/types/po.types";
@@ -32,36 +31,13 @@ const ScopeReviewPanel = ({
 }: ScopeReviewPanelProps) => {
   const [feedback, setFeedback] = useState("");
 
-  const [isGenerating, setIsGenerating] = useState(false);
-
   const [isRevising, setIsRevising] = useState(false);
 
   const [isApproving, setIsApproving] = useState(false);
 
+  const [showRunDetails, setShowRunDetails] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
-
-  const canGenerate =
-    poState?.status === "COMPLETED" &&
-    poState.analysis?.decision === "READY_FOR_SCOPE";
-
-  const handleGenerate = async (): Promise<void> => {
-    try {
-      setIsGenerating(true);
-      setError(null);
-
-      const state = await generateProjectScope(project._id);
-
-      onScopeChanged(state);
-    } catch (generateError) {
-      setError(
-        generateError instanceof Error
-          ? generateError.message
-          : "Failed to generate product scope",
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   const handleRevision = async (
     event: FormEvent<HTMLFormElement>,
@@ -130,54 +106,40 @@ const ScopeReviewPanel = ({
   };
 
   if (!scopeState) {
-    return (
-      <div className="py-4">
-        <div className="rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.015] px-6 py-10 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-2xl border border-indigo-400/15 bg-indigo-500/[0.05] text-sm font-bold text-indigo-300">
-            PO
-          </div>
+    if (poState?.status === "COMPLETED") {
+      return (
+        <div className="py-14 text-center">
+          <div className="mx-auto size-9 animate-spin rounded-full border-2 border-sky-400/20 border-t-sky-300" />
 
-          <h3 className="mt-5 text-lg font-semibold">Generate product scope</h3>
+          <p className="mt-5 font-medium">Preparing product scope</p>
 
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-            Once requirement discovery is complete, the Product Owner Agent can
-            convert the validated requirement into features, user stories,
-            acceptance criteria, priorities and dependencies.
+          <p className="mt-2 text-sm text-muted-foreground">
+            The orchestrator is continuing automatically.
           </p>
-
-          <Button
-            className="mt-6"
-            disabled={!canGenerate || isGenerating}
-            onClick={() => void handleGenerate()}
-          >
-            {isGenerating ? "Generating scope..." : "Generate product scope"}
-          </Button>
-
-          {!canGenerate ? (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Complete requirement discovery before generating scope.
-            </p>
-          ) : null}
-
-          {error ? (
-            <div className="mx-auto mt-5 max-w-xl rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
         </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-dashed border-white/[0.08] p-8 text-center">
+        <p className="font-medium">Waiting for requirement discovery</p>
+
+        <p className="mt-2 text-sm text-muted-foreground">
+          Scope generation starts automatically once the requirement is clear.
+        </p>
       </div>
     );
   }
 
   if (scopeState.status === "CREATED" || scopeState.status === "RUNNING") {
     return (
-      <div className="py-12 text-center">
-        <div className="mx-auto size-9 animate-spin rounded-full border-2 border-indigo-400/20 border-t-indigo-400" />
+      <div className="py-14 text-center">
+        <div className="mx-auto size-9 animate-spin rounded-full border-2 border-sky-400/20 border-t-sky-300" />
 
         <p className="mt-5 font-medium">Product Owner Agent is working</p>
 
         <p className="mt-2 text-sm text-muted-foreground">
-          Building the product scope...
+          Building the product scope.
         </p>
       </div>
     );
@@ -209,7 +171,7 @@ const ScopeReviewPanel = ({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col justify-between gap-4 border-b border-white/[0.05] pb-6 sm:flex-row sm:items-center">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
         <div className="flex items-center gap-3">
           <Badge
             variant="secondary"
@@ -221,7 +183,7 @@ const ScopeReviewPanel = ({
           >
             {scopeState.status === "COMPLETED"
               ? "Approved"
-              : "Human review required"}
+              : "Your review required"}
           </Badge>
 
           <span className="text-xs text-muted-foreground">
@@ -230,12 +192,46 @@ const ScopeReviewPanel = ({
           </span>
         </div>
 
-        {scopeState.usage ? (
-          <span className="text-xs text-muted-foreground">
-            {scopeState.usage.totalTokens.toLocaleString()} total tokens
-          </span>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => setShowRunDetails((current) => !current)}
+          className="text-xs text-muted-foreground transition hover:text-foreground"
+        >
+          {showRunDetails ? "Hide run details" : "View run details"}
+        </button>
       </div>
+
+      {showRunDetails ? (
+        <div className="grid gap-3 rounded-xl border border-white/[0.06] bg-black/10 p-4 sm:grid-cols-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Agent
+            </p>
+
+            <p className="mt-2 text-sm">Product Owner</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Revisions
+            </p>
+
+            <p className="mt-2 text-sm">{revisionCount}</p>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              Tokens
+            </p>
+
+            <p className="mt-2 text-sm">
+              {scopeState.usage
+                ? scopeState.usage.totalTokens.toLocaleString()
+                : "—"}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <section>
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -313,7 +309,6 @@ const ScopeReviewPanel = ({
                 className="flex gap-3 text-sm leading-6 text-muted-foreground"
               >
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-indigo-400" />
-
                 <span>{assumption}</span>
               </div>
             ))}
@@ -332,7 +327,6 @@ const ScopeReviewPanel = ({
                 className="flex gap-3 text-sm leading-6 text-muted-foreground"
               >
                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-rose-400" />
-
                 <span>{item}</span>
               </div>
             ))}
@@ -341,15 +335,13 @@ const ScopeReviewPanel = ({
       </div>
 
       {scopeState.status === "WAITING_FOR_HUMAN" ? (
-        <section className="border-t border-white/[0.05] pt-8">
-          <div>
-            <h3 className="text-lg font-semibold">Review this scope</h3>
+        <section className="border-t border-white/[0.06] pt-8">
+          <h3 className="text-lg font-semibold">Review product scope</h3>
 
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Approve it to complete Product Discovery, or describe what the PO
-              Agent should change and it will revise the same scope run.
-            </p>
-          </div>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Approve the scope or tell the Product Owner Agent what should
+            change.
+          </p>
 
           <form onSubmit={handleRevision} className="mt-6 space-y-4">
             <Textarea
@@ -357,7 +349,7 @@ const ScopeReviewPanel = ({
               onChange={(event) => setFeedback(event.target.value)}
               disabled={isRevising || isApproving}
               rows={4}
-              placeholder="Example: Move PDF uploads out of MVP and make CSV the only supported import format."
+              placeholder="Describe the changes you want..."
               className="resize-none border-white/[0.08] bg-white/[0.025]"
             />
 
@@ -387,14 +379,13 @@ const ScopeReviewPanel = ({
           </form>
         </section>
       ) : (
-        <section className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.035] p-6">
+        <section className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.035] p-5">
           <p className="font-medium text-emerald-300">
             Product Owner stage complete
           </p>
 
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            The scope has been approved. The project is now ready for the
-            Architecture stage.
+          <p className="mt-2 text-sm text-muted-foreground">
+            The approved scope is ready for the Architecture stage.
           </p>
         </section>
       )}

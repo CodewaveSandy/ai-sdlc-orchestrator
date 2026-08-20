@@ -1,126 +1,69 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "./assets/vite.svg";
-import heroImg from "./assets/hero.png";
-import "./App.css";
+import { Button } from "@/components/ui/button";
 
-function App() {
-  const [count, setCount] = useState(0);
-
+const App = () => {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
+    <main className="min-h-screen bg-slate-950 text-white">
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 py-16">
+        <div className="max-w-3xl">
+          <div className="mb-6 inline-flex rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
+            AI SDLC Orchestrator
+          </div>
+
+          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">
+            Build software with an AI-powered engineering team.
+          </h1>
+
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-400">
+            A unified orchestration layer for AI Product Owners, Developers, QA
+            agents, and future SDLC roles working together toward measurable
+            software outcomes.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
 
-      <div className="ticks"></div>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Button size="lg">Start Building</Button>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-white/10 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              View System Status
+            </Button>
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks flex items-center justify-center gap-4">
-        <div>asd</div>
-        <div>asd1</div>
+        <div className="mt-16 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm text-slate-400">Product Agent</p>
+            <h2 className="mt-2 text-xl font-medium">Ready</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Converts product requirements into structured features, stories,
+              and acceptance criteria.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm text-slate-400">Developer Agent</p>
+            <h2 className="mt-2 text-xl font-medium">Coming next</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Implements stories, works with source code, runs tests, and
+              repairs failures.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <p className="text-sm text-slate-400">QA Agent</p>
+            <h2 className="mt-2 text-xl font-medium">Planned</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              Validates acceptance criteria, tests deployed applications, and
+              feeds defects back into the workflow.
+            </p>
+          </div>
+        </div>
       </div>
-      <section id="spacer"></section>
-    </>
+    </main>
   );
-}
+};
 
 export default App;
 

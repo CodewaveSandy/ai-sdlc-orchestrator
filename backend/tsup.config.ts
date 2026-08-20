@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 export default defineConfig({
   entry: ["src/server.ts"],
-  format: ["esm"],
+  format: ["cjs"],
   target: "node22",
   platform: "node",
   outDir: "dist",
@@ -11,5 +11,9 @@ export default defineConfig({
   splitting: false,
   bundle: true,
   minify: false,
+  dts: false,
+  outExtension: () => ({
+    js: ".js",
+  }),
 });
 

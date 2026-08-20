@@ -39,3 +39,28 @@ export const getProjects = async (): Promise<Project[]> => {
   return projects;
 };
 
+export const setProjectRequirement = async (
+  projectId: string,
+  rawRequirement: string,
+): Promise<Project | null> => {
+  if (!mongoose.isValidObjectId(projectId)) {
+    return null;
+  }
+
+  const project = await ProjectModel.findByIdAndUpdate(
+    projectId,
+    {
+      $set: {
+        rawRequirement,
+        status: "DISCOVERY",
+        currentStage: "PRODUCT_DISCOVERY",
+      },
+    },
+    {
+      new: true,
+    },
+  ).lean();
+
+  return project;
+};
+

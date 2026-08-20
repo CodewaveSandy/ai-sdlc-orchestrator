@@ -27,5 +27,7 @@ export const env = {
   port: getPort(),
   mongodbUri: getRequiredEnvironmentVariable("MONGODB_URI"),
   corsOrigin: getRequiredEnvironmentVariable("CORS_ORIGIN"),
+  openaiApiKey: getRequiredEnvironmentVariable("OPENAI_API_KEY"),
+  openaiModel: process.env.OPENAI_MODEL ?? "gpt-5.4",
 };
 

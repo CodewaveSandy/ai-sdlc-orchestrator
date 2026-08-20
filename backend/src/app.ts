@@ -1,17 +1,23 @@
 import cors from "cors";
 import express from "express";
 
+import { env } from "./config/env";
+import healthRouter from "./routes/health.routes";
+
 const app = express();
 
-app.use(cors());
+app.disable("x-powered-by");
+
+app.use(
+  cors({
+    origin: env.corsOrigin,
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
 
-app.get("/health", (_request, response) => {
-  response.status(200).json({
-    success: true,
-    message: "AI SDLC Orchestrator API is healthy",
-  });
-});
+app.use("/health", healthRouter);
 
 export default app;
 

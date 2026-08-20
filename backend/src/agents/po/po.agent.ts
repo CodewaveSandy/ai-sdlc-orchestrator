@@ -1,12 +1,13 @@
 import { zodTextFormat } from "openai/helpers/zod";
 
-import openai from "../../config/openai";
 import { env } from "../../config/env";
+import openai from "../../config/openai";
+import { PO_REQUIREMENT_ANALYSIS_INSTRUCTIONS } from "./po.prompts";
 import {
   poRequirementAnalysisSchema,
+  type PoClarificationRound,
   type PoRequirementAnalysis,
 } from "./po.schemas";
-import { PO_REQUIREMENT_ANALYSIS_INSTRUCTIONS } from "./po.prompts";
 
 export interface PoAgentExecutionResult {
   analysis: PoRequirementAnalysis;
@@ -19,10 +20,44 @@ export interface PoAgentExecutionResult {
   };
 }
 
+const buildClarificationContext = (
+  clarificationRounds: PoClarificationRound[],
+): string => {
+  if (clarificationRounds.length === 0) {
+    return "No clarification questions have been answered yet.";
+  }
+
+  return clarificationRounds
+    .map((round, roundIndex) => {
+      const questionAnswerPairs = round.questions
+        .map((question, questionIndex) => {
+          const answer = round.answers[questionIndex] ?? "No answer provided";
+
+          return [
+            `Question ${questionIndex + 1}:`,
+            question,
+            "",
+            "Customer answer:",
+            answer,
+          ].join("\n");
+        })
+        .join("\n\n");
+
+      return [
+        `Clarification round ${roundIndex + 1}`,
+        questionAnswerPairs,
+      ].join("\n\n");
+    })
+    .join("\n\n---\n\n");
+};
+
 export const analyzeRequirement = async (
   projectName: string,
   rawRequirement: string,
+  clarificationRounds: PoClarificationRound[] = [],
 ): Promise<PoAgentExecutionResult> => {
+  const clarificationContext = buildClarificationContext(clarificationRounds);
+
   const response = await openai.responses.parse({
     model: env.openaiModel,
 
@@ -32,8 +67,15 @@ export const analyzeRequirement = async (
 Project name:
 ${projectName}
 
-Customer requirement:
+Original customer requirement:
 ${rawRequirement}
+
+Clarification history:
+${clarificationContext}
+
+Analyze the requirement using the original requirement together with all clarification answers provided so far.
+
+Do not repeat questions that have already been answered unless the customer's answer itself introduced a materially important ambiguity.
 `.trim(),
 
     text: {

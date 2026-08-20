@@ -22,5 +22,20 @@ export const poRequirementAnalysisSchema = z.object({
     ),
 });
 
+export const poClarificationRoundSchema = z.object({
+  questions: z.array(z.string()),
+  answers: z.array(z.string()),
+  answeredAt: z.string(),
+});
+
+export const poAgentRunInputSchema = z.object({
+  rawRequirement: z.string(),
+  clarificationRounds: z.array(poClarificationRoundSchema).default([]),
+});
+
 export type PoRequirementAnalysis = z.infer<typeof poRequirementAnalysisSchema>;
+
+export type PoClarificationRound = z.infer<typeof poClarificationRoundSchema>;
+
+export type PoAgentRunInput = z.infer<typeof poAgentRunInputSchema>;
 

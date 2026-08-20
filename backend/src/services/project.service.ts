@@ -57,7 +57,7 @@ export const setProjectRequirement = async (
       },
     },
     {
-      new: true,
+      returnDocument: "after",
     },
   ).lean();
 

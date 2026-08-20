@@ -64,3 +64,27 @@ export const setProjectRequirement = async (
   return project;
 };
 
+export const completeProductDiscovery = async (
+  projectId: string,
+): Promise<Project | null> => {
+  if (!mongoose.isValidObjectId(projectId)) {
+    return null;
+  }
+
+  const project = await ProjectModel.findByIdAndUpdate(
+    projectId,
+    {
+      $set: {
+        status: "IN_PROGRESS",
+        currentStage: "ARCHITECTURE",
+        progress: 15,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  ).lean();
+
+  return project;
+};
+

@@ -6,6 +6,11 @@ export const AGENT_TYPES = [
   "DEVOPS",
 ] as const;
 
+export const AGENT_TASK_TYPES = [
+  "REQUIREMENT_ANALYSIS",
+  "SCOPE_GENERATION",
+] as const;
+
 export const AGENT_RUN_STATUSES = [
   "CREATED",
   "RUNNING",
@@ -15,6 +20,8 @@ export const AGENT_RUN_STATUSES = [
 ] as const;
 
 export type AgentType = (typeof AGENT_TYPES)[number];
+
+export type AgentTaskType = (typeof AGENT_TASK_TYPES)[number];
 
 export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number];
 
@@ -27,6 +34,7 @@ export interface AgentRunUsage {
 export interface AgentRun {
   projectId: string;
   agentType: AgentType;
+  taskType?: AgentTaskType;
   status: AgentRunStatus;
   modelName: string;
   input: unknown;

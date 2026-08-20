@@ -49,7 +49,9 @@ const updateAgentRunFromResult = (
 
   agentRun.status = nextStatus;
   agentRun.output = result.analysis;
+
   agentRun.providerResponseId = result.providerResponseId;
+
   agentRun.modelName = result.model;
 
   const existingUsage = agentRun.usage;
@@ -83,6 +85,7 @@ export const submitProjectRequirement = async (
   const agentRun = await AgentRunModel.create({
     projectId,
     agentType: "PRODUCT_OWNER",
+    taskType: "REQUIREMENT_ANALYSIS",
     status: "CREATED",
     modelName: env.openaiModel,
 
@@ -139,6 +142,17 @@ export const getProjectPoWorkflowState = async (
   const agentRun = await AgentRunModel.findOne({
     projectId,
     agentType: "PRODUCT_OWNER",
+
+    $or: [
+      {
+        taskType: "REQUIREMENT_ANALYSIS",
+      },
+      {
+        taskType: {
+          $exists: false,
+        },
+      },
+    ],
   }).sort({
     createdAt: -1,
   });
@@ -165,6 +179,17 @@ export const submitPoClarificationAnswers = async (
     _id: agentRunId,
     projectId,
     agentType: "PRODUCT_OWNER",
+
+    $or: [
+      {
+        taskType: "REQUIREMENT_ANALYSIS",
+      },
+      {
+        taskType: {
+          $exists: false,
+        },
+      },
+    ],
   });
 
   if (!agentRun) {

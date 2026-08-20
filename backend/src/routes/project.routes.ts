@@ -10,6 +10,12 @@ import {
   submitPoClarificationsController,
   submitRequirementController,
 } from "../controllers/requirement.controller";
+import {
+  approveScopeController,
+  generateScopeController,
+  getScopeStateController,
+  reviseScopeController,
+} from "../controllers/scope.controller";
 
 const projectRouter = Router();
 
@@ -25,6 +31,14 @@ projectRouter.post(
   "/:projectId/po/clarifications",
   submitPoClarificationsController,
 );
+
+projectRouter.get("/:projectId/po/scope", getScopeStateController);
+
+projectRouter.post("/:projectId/po/scope", generateScopeController);
+
+projectRouter.post("/:projectId/po/scope/revise", reviseScopeController);
+
+projectRouter.post("/:projectId/po/scope/approve", approveScopeController);
 
 projectRouter.get("/:projectId", getProjectByIdController);
 

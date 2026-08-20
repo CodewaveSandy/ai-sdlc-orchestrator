@@ -2,6 +2,7 @@ import { model, Schema, type HydratedDocument, type Model } from "mongoose";
 
 import {
   AGENT_RUN_STATUSES,
+  AGENT_TASK_TYPES,
   AGENT_TYPES,
   type AgentRun,
 } from "../types/agent-run.types";
@@ -45,6 +46,12 @@ const agentRunSchema = new Schema<AgentRun>(
       type: String,
       enum: AGENT_TYPES,
       required: true,
+      index: true,
+    },
+
+    taskType: {
+      type: String,
+      enum: AGENT_TASK_TYPES,
       index: true,
     },
 
@@ -98,6 +105,8 @@ const agentRunSchema = new Schema<AgentRun>(
 
 agentRunSchema.index({
   projectId: 1,
+  agentType: 1,
+  taskType: 1,
   createdAt: -1,
 });
 

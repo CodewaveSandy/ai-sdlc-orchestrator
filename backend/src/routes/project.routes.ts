@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   createProjectController,
+  deleteProjectController,
   getProjectByIdController,
   getProjectsController,
 } from "../controllers/project.controller";
@@ -39,6 +40,8 @@ projectRouter.post("/:projectId/po/scope", generateScopeController);
 projectRouter.post("/:projectId/po/scope/revise", reviseScopeController);
 
 projectRouter.post("/:projectId/po/scope/approve", approveScopeController);
+
+projectRouter.delete("/:projectId", deleteProjectController);
 
 projectRouter.get("/:projectId", getProjectByIdController);
 

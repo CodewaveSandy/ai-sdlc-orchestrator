@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api";
 import type {
   CreateProjectPayload,
   CreateProjectResponse,
+  DeleteProjectResponse,
   Project,
   ProjectResponse,
   ProjectsResponse,
@@ -35,5 +36,12 @@ export const createProject = async (
   });
 
   return response.data.project;
+};
+
+export const deleteProject = async (projectId: string): Promise<void> => {
+  await apiRequest<DeleteProjectResponse>({
+    method: "DELETE",
+    url: `/api/projects/${projectId}`,
+  });
 };
 

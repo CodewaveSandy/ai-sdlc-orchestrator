@@ -17,6 +17,7 @@ export const createProject = async (
     currentStage: "REQUIREMENT",
     workflowStatus: "IDLE",
     progress: 0,
+    isDeleted: false,
   });
 
   return project.toObject();
@@ -29,19 +30,45 @@ export const getProjectById = async (
     return null;
   }
 
-  const project = await ProjectModel.findById(projectId).lean();
-
-  return project;
+  return ProjectModel.findOne({
+    _id: projectId,
+    isDeleted: false,
+  }).lean();
 };
 
 export const getProjects = async (): Promise<Project[]> => {
-  const projects = await ProjectModel.find()
+  return ProjectModel.find({
+    isDeleted: false,
+  })
     .sort({
       createdAt: -1,
     })
     .lean();
+};
 
-  return projects;
+export const softDeleteProject = async (
+  projectId: string,
+): Promise<Project | null> => {
+  if (!mongoose.isValidObjectId(projectId)) {
+    return null;
+  }
+
+  return ProjectModel.findOneAndUpdate(
+    {
+      _id: projectId,
+      isDeleted: false,
+    },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        workflowStatus: "IDLE",
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  ).lean();
 };
 
 export const setProjectRequirement = async (
@@ -52,8 +79,11 @@ export const setProjectRequirement = async (
     return null;
   }
 
-  return ProjectModel.findByIdAndUpdate(
-    projectId,
+  return ProjectModel.findOneAndUpdate(
+    {
+      _id: projectId,
+      isDeleted: false,
+    },
     {
       $set: {
         rawRequirement,
@@ -76,8 +106,11 @@ export const setProjectWorkflowStatus = async (
     return null;
   }
 
-  return ProjectModel.findByIdAndUpdate(
-    projectId,
+  return ProjectModel.findOneAndUpdate(
+    {
+      _id: projectId,
+      isDeleted: false,
+    },
     {
       $set: {
         workflowStatus,
@@ -96,8 +129,11 @@ export const completeProductDiscovery = async (
     return null;
   }
 
-  return ProjectModel.findByIdAndUpdate(
-    projectId,
+  return ProjectModel.findOneAndUpdate(
+    {
+      _id: projectId,
+      isDeleted: false,
+    },
     {
       $set: {
         status: "IN_PROGRESS",

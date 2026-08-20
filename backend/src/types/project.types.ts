@@ -39,6 +39,10 @@ export interface Project {
   currentStage: ProjectStage;
   workflowStatus: ProjectWorkflowStatus;
   progress: number;
+
+  isDeleted: boolean;
+  deletedAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }

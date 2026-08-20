@@ -58,12 +58,28 @@ const projectSchema = new Schema<Project>(
       min: 0,
       max: 100,
     },
+
+    isDeleted: {
+      type: Boolean,
+      required: true,
+      default: false,
+      index: true,
+    },
+
+    deletedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   },
 );
+
+projectSchema.index({
+  isDeleted: 1,
+  createdAt: -1,
+});
 
 const ProjectModel: Model<Project> = model<Project>("Project", projectSchema);
 

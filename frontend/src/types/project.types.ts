@@ -37,14 +37,10 @@ export interface Project {
   rawRequirement?: string;
   status: ProjectStatus;
   currentStage: ProjectStage;
-
-  /*
-   * Temporarily optional for projects created
-   * before workflowStatus was introduced.
-   */
   workflowStatus?: ProjectWorkflowStatus;
-
   progress: number;
+  isDeleted?: boolean;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,5 +73,10 @@ export interface CreateProjectResponse {
   data: {
     project: Project;
   };
+}
+
+export interface DeleteProjectResponse {
+  success: boolean;
+  message: string;
 }
 

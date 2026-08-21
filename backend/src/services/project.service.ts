@@ -138,8 +138,34 @@ export const completeProductDiscovery = async (
       $set: {
         status: "IN_PROGRESS",
         currentStage: "ARCHITECTURE",
-        workflowStatus: "IDLE",
+        workflowStatus: "RUNNING",
         progress: 15,
+      },
+    },
+    {
+      returnDocument: "after",
+    },
+  ).lean();
+};
+
+export const completeArchitecture = async (
+  projectId: string,
+): Promise<Project | null> => {
+  if (!mongoose.isValidObjectId(projectId)) {
+    return null;
+  }
+
+  return ProjectModel.findOneAndUpdate(
+    {
+      _id: projectId,
+      isDeleted: false,
+    },
+    {
+      $set: {
+        status: "IN_PROGRESS",
+        currentStage: "DEVELOPMENT",
+        workflowStatus: "IDLE",
+        progress: 30,
       },
     },
     {

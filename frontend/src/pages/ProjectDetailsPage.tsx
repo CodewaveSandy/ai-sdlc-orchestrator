@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ArchitectureReviewPanel from "@/components/projects/ArchitectureReviewPanel";
 import PendingStage from "@/components/projects/PendingStage";
 import PoWorkflowPanel from "@/components/projects/PoWorkflowPanel";
 import ProjectStageStepper from "@/components/projects/ProjectStageStepper";
@@ -8,9 +9,11 @@ import ProjectStatusBadge from "@/components/projects/ProjectStatusBadge";
 import ProjectWorkflowStatus from "@/components/projects/ProjectWorkflowStatus";
 import ScopeReviewPanel from "@/components/projects/ScopeReviewPanel";
 import { Button } from "@/components/ui/button";
+import { getProjectArchitectureState } from "@/services/architecture.service";
 import { getPoWorkflowState } from "@/services/po.service";
 import { getProjectById } from "@/services/project.service";
 import { getProjectScopeState } from "@/services/scope.service";
+import type { ArchitectureWorkflowState } from "@/types/architecture.types";
 import type { PoWorkflowState } from "@/types/po.types";
 import type { Project, ProjectStage } from "@/types/project.types";
 import type { ScopeWorkflowState } from "@/types/scope.types";
@@ -34,7 +37,11 @@ const getStageIndex = (stage: ProjectStage): number =>
   stageOrder.indexOf(stage);
 
 const getAgentStatus = (
-  status: PoWorkflowState["status"] | ScopeWorkflowState["status"] | undefined,
+  status:
+    | PoWorkflowState["status"]
+    | ScopeWorkflowState["status"]
+    | ArchitectureWorkflowState["status"]
+    | undefined,
 ): WorkspaceStepStatus => {
   switch (status) {
     case "COMPLETED":
@@ -68,6 +75,9 @@ const ProjectDetailsPage = () => {
 
   const [scopeState, setScopeState] = useState<ScopeWorkflowState | null>(null);
 
+  const [architectureState, setArchitectureState] =
+    useState<ArchitectureWorkflowState | null>(null);
+
   const [selectedStepId, setSelectedStepId] = useState<WorkspaceStepId | null>(
     null,
   );
@@ -81,15 +91,28 @@ const ProjectDetailsPage = () => {
       return;
     }
 
-    const [projectData, workflowState, productScopeState] = await Promise.all([
+    const [
+      projectData,
+      workflowState,
+      productScopeState,
+      productArchitectureState,
+    ] = await Promise.all([
       getProjectById(projectId),
+
       getPoWorkflowState(projectId),
+
       getProjectScopeState(projectId),
+
+      getProjectArchitectureState(projectId),
     ]);
 
     setProject(projectData);
+
     setPoState(workflowState);
+
     setScopeState(productScopeState);
+
+    setArchitectureState(productArchitectureState);
   };
 
   useEffect(() => {
@@ -132,6 +155,8 @@ const ProjectDetailsPage = () => {
 
     const scopeStatus = getAgentStatus(scopeState?.status);
 
+    const architectureStatus = getAgentStatus(architectureState?.status);
+
     const getFutureStageStatus = (stage: ProjectStage): WorkspaceStepStatus => {
       const index = getStageIndex(stage);
 
@@ -157,6 +182,10 @@ const ProjectDetailsPage = () => {
           return "CURRENT";
       }
     };
+
+    const resolvedArchitectureStatus = architectureState
+      ? architectureStatus
+      : getFutureStageStatus("ARCHITECTURE");
 
     return [
       {
@@ -185,7 +214,7 @@ const ProjectDetailsPage = () => {
         number: "03",
         title: "Architecture",
         subtitle: "Architect Agent",
-        status: getFutureStageStatus("ARCHITECTURE"),
+        status: resolvedArchitectureStatus,
       },
 
       {
@@ -212,7 +241,7 @@ const ProjectDetailsPage = () => {
         status: getFutureStageStatus("DEPLOYMENT"),
       },
     ];
-  }, [poState, project, scopeState]);
+  }, [architectureState, poState, project, scopeState]);
 
   const activeStepId = useMemo<WorkspaceStepId>(() => {
     if (selectedStepId) {
@@ -246,12 +275,6 @@ const ProjectDetailsPage = () => {
   ): Promise<void> => {
     setPoState(state);
 
-    /*
-     * READY_FOR_SCOPE now causes backend
-     * orchestration to generate scope
-     * automatically before the request
-     * completes.
-     */
     if (state.status === "COMPLETED") {
       await refreshWorkspace();
 
@@ -268,9 +291,30 @@ const ProjectDetailsPage = () => {
   ): Promise<void> => {
     setScopeState(state);
 
+    /*
+     * Backend orchestration has already
+     * generated Architecture before this
+     * request returns.
+     */
     await refreshWorkspace();
 
     setSelectedStepId("ARCHITECTURE");
+  };
+
+  const handleArchitectureChanged = (
+    state: ArchitectureWorkflowState,
+  ): void => {
+    setArchitectureState(state);
+  };
+
+  const handleArchitectureApproved = async (
+    state: ArchitectureWorkflowState,
+  ): Promise<void> => {
+    setArchitectureState(state);
+
+    await refreshWorkspace();
+
+    setSelectedStepId("DEVELOPMENT");
   };
 
   const renderSelectedStage = () => {
@@ -297,27 +341,12 @@ const ProjectDetailsPage = () => {
 
       case "ARCHITECTURE":
         return (
-          <div className="py-12">
-            <div className="max-w-2xl">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-300">
-                Architecture
-              </p>
-
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-                Architect Agent
-              </h2>
-
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                Product scope has been approved. The next milestone will add the
-                Architect Agent, which will start automatically and pause only
-                when its architecture proposal requires human approval.
-              </p>
-
-              <div className="mt-6 rounded-xl border border-dashed border-indigo-400/15 bg-indigo-500/[0.025] p-5 text-sm text-muted-foreground">
-                Architect Agent implementation is next.
-              </div>
-            </div>
-          </div>
+          <ArchitectureReviewPanel
+            project={project!}
+            architectureState={architectureState}
+            onArchitectureChanged={handleArchitectureChanged}
+            onArchitectureApproved={handleArchitectureApproved}
+          />
         );
 
       case "DEVELOPMENT":
@@ -427,7 +456,7 @@ const ProjectDetailsPage = () => {
               </div>
 
               {selectedStep ? (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs capitalize text-muted-foreground">
                   {selectedStep.status.toLowerCase().replaceAll("_", " ")}
                 </span>
               ) : null}

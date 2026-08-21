@@ -1,6 +1,11 @@
 import { Router } from "express";
 
 import {
+  approveArchitectureController,
+  getArchitectureStateController,
+  reviseArchitectureController,
+} from "../controllers/architecture.controller";
+import {
   createProjectController,
   deleteProjectController,
   getProjectByIdController,
@@ -35,11 +40,27 @@ projectRouter.post(
 
 projectRouter.get("/:projectId/po/scope", getScopeStateController);
 
+/*
+ * Retained as a debug/fallback endpoint.
+ * Normal orchestration does not require it.
+ */
 projectRouter.post("/:projectId/po/scope", generateScopeController);
 
 projectRouter.post("/:projectId/po/scope/revise", reviseScopeController);
 
 projectRouter.post("/:projectId/po/scope/approve", approveScopeController);
+
+projectRouter.get("/:projectId/architecture", getArchitectureStateController);
+
+projectRouter.post(
+  "/:projectId/architecture/revise",
+  reviseArchitectureController,
+);
+
+projectRouter.post(
+  "/:projectId/architecture/approve",
+  approveArchitectureController,
+);
 
 projectRouter.delete("/:projectId", deleteProjectController);
 

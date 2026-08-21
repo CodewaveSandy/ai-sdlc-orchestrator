@@ -9,6 +9,7 @@ export const AGENT_TYPES = [
 export const AGENT_TASK_TYPES = [
   "REQUIREMENT_ANALYSIS",
   "SCOPE_GENERATION",
+  "ARCHITECTURE_DESIGN",
 ] as const;
 
 export const AGENT_RUN_STATUSES = [

@@ -1,6 +1,13 @@
 import type { PoRequirementAnalysis } from "../agents/po/po.schemas";
+import type { ArchitectureWorkflowState } from "../types/architecture.types";
 import type { ScopeWorkflowState } from "../types/scope.types";
 import {
+  approveArchitectureRun,
+  generateProjectArchitecture,
+  reviseProjectArchitecture,
+} from "./architecture.service";
+import {
+  completeArchitecture,
   completeProductDiscovery,
   setProjectWorkflowStatus,
 } from "./project.service";
@@ -61,6 +68,24 @@ export const reviseScopeAndContinue = async (
   }
 };
 
+export const startArchitecture = async (
+  projectId: string,
+): Promise<ArchitectureWorkflowState> => {
+  await setProjectWorkflowStatus(projectId, "RUNNING");
+
+  try {
+    const state = await generateProjectArchitecture(projectId);
+
+    await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
+
+    return state;
+  } catch (error) {
+    await setProjectWorkflowStatus(projectId, "FAILED");
+
+    throw error;
+  }
+};
+
 export const approveScopeAndContinue = async (
   projectId: string,
   agentRunId: string,
@@ -69,16 +94,47 @@ export const approveScopeAndContinue = async (
 
   await completeProductDiscovery(projectId);
 
+  await startArchitecture(projectId);
+
+  return state;
+};
+
+export const reviseArchitectureAndContinue = async (
+  projectId: string,
+  agentRunId: string,
+  feedback: string,
+): Promise<ArchitectureWorkflowState> => {
+  await setProjectWorkflowStatus(projectId, "RUNNING");
+
+  try {
+    const state = await reviseProjectArchitecture(
+      projectId,
+      agentRunId,
+      feedback,
+    );
+
+    await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
+
+    return state;
+  } catch (error) {
+    await setProjectWorkflowStatus(projectId, "FAILED");
+
+    throw error;
+  }
+};
+
+export const approveArchitectureAndContinue = async (
+  projectId: string,
+  agentRunId: string,
+): Promise<ArchitectureWorkflowState> => {
+  const state = await approveArchitectureRun(projectId, agentRunId);
+
+  await completeArchitecture(projectId);
+
   /*
-   * This is intentionally the orchestration
-   * boundary for the next stage.
+   * When Developer Agent exists:
    *
-   * Once the Architect Agent exists, this
-   * function will continue with:
-   *
-   * await startArchitecture(projectId);
-   *
-   * No new human click will be required.
+   * await startDevelopment(projectId);
    */
 
   return state;

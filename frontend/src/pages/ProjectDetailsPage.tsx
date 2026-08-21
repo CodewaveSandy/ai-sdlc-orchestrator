@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import ArchitectureReviewPanel from "@/components/projects/ArchitectureReviewPanel";
@@ -9,6 +9,7 @@ import ProjectStatusBadge from "@/components/projects/ProjectStatusBadge";
 import ProjectWorkflowStatus from "@/components/projects/ProjectWorkflowStatus";
 import ScopeReviewPanel from "@/components/projects/ScopeReviewPanel";
 import { Button } from "@/components/ui/button";
+import { useProjectRealtime } from "@/hooks/useProjectRealtime";
 import { getProjectArchitectureState } from "@/services/architecture.service";
 import { getPoWorkflowState } from "@/services/po.service";
 import { getProjectById } from "@/services/project.service";
@@ -22,6 +23,14 @@ import type {
   WorkspaceStepId,
   WorkspaceStepStatus,
 } from "@/types/workflow.types";
+
+interface WorkspaceSnapshot {
+  project: Project;
+  poState: PoWorkflowState | null;
+  scopeState: ScopeWorkflowState | null;
+
+  architectureState: ArchitectureWorkflowState | null;
+}
 
 const stageOrder: ProjectStage[] = [
   "REQUIREMENT",
@@ -62,6 +71,27 @@ const getAgentStatus = (
   }
 };
 
+const loadWorkspaceSnapshot = async (
+  projectId: string,
+): Promise<WorkspaceSnapshot> => {
+  const [project, poState, scopeState, architectureState] = await Promise.all([
+    getProjectById(projectId),
+
+    getPoWorkflowState(projectId),
+
+    getProjectScopeState(projectId),
+
+    getProjectArchitectureState(projectId),
+  ]);
+
+  return {
+    project,
+    poState,
+    scopeState,
+    architectureState,
+  };
+};
+
 const ProjectDetailsPage = () => {
   const { projectId } = useParams<{
     projectId: string;
@@ -86,63 +116,81 @@ const ProjectDetailsPage = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  const refreshWorkspace = async (): Promise<void> => {
+  const applyWorkspaceSnapshot = useCallback(
+    (snapshot: WorkspaceSnapshot): void => {
+      setProject(snapshot.project);
+
+      setPoState(snapshot.poState);
+
+      setScopeState(snapshot.scopeState);
+
+      setArchitectureState(snapshot.architectureState);
+    },
+    [],
+  );
+
+  const refreshWorkspace = useCallback(async (): Promise<void> => {
     if (!projectId) {
       return;
     }
 
-    const [
-      projectData,
-      workflowState,
-      productScopeState,
-      productArchitectureState,
-    ] = await Promise.all([
-      getProjectById(projectId),
+    try {
+      const snapshot = await loadWorkspaceSnapshot(projectId);
 
-      getPoWorkflowState(projectId),
+      applyWorkspaceSnapshot(snapshot);
 
-      getProjectScopeState(projectId),
+      setError(null);
+    } catch (refreshError) {
+      console.error("Failed to refresh project workspace", refreshError);
+    }
+  }, [applyWorkspaceSnapshot, projectId]);
 
-      getProjectArchitectureState(projectId),
-    ]);
-
-    setProject(projectData);
-
-    setPoState(workflowState);
-
-    setScopeState(productScopeState);
-
-    setArchitectureState(productArchitectureState);
-  };
+  useProjectRealtime({
+    projectId,
+    onRefresh: refreshWorkspace,
+  });
 
   useEffect(() => {
-    const loadWorkspace = async (): Promise<void> => {
-      if (!projectId) {
-        setError("Project ID is missing");
+    if (!projectId) {
+      return;
+    }
 
-        setIsLoading(false);
+    let isCancelled = false;
 
-        return;
-      }
-
+    const loadInitialWorkspace = async (): Promise<void> => {
       try {
-        setIsLoading(true);
-        setError(null);
+        const snapshot = await loadWorkspaceSnapshot(projectId);
 
-        await refreshWorkspace();
+        if (isCancelled) {
+          return;
+        }
+
+        applyWorkspaceSnapshot(snapshot);
+
+        setError(null);
       } catch (loadError) {
+        if (isCancelled) {
+          return;
+        }
+
         setError(
           loadError instanceof Error
             ? loadError.message
             : "Failed to load project",
         );
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    void loadWorkspace();
-  }, [projectId]);
+    void loadInitialWorkspace();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [applyWorkspaceSnapshot, projectId]);
 
   const steps = useMemo<WorkspaceStep[]>(() => {
     if (!project) {
@@ -201,6 +249,7 @@ const ProjectDetailsPage = () => {
         number: "02",
         title: "Product Scope",
         subtitle: "Product Owner Agent",
+
         status:
           scopeState === null &&
           poState?.status === "COMPLETED" &&
@@ -222,6 +271,7 @@ const ProjectDetailsPage = () => {
         number: "04",
         title: "Development",
         subtitle: "Developer Agent",
+
         status: getFutureStageStatus("DEVELOPMENT"),
       },
 
@@ -230,6 +280,7 @@ const ProjectDetailsPage = () => {
         number: "05",
         title: "Quality Assurance",
         subtitle: "QA Agent",
+
         status: getFutureStageStatus("QA"),
       },
 
@@ -238,6 +289,7 @@ const ProjectDetailsPage = () => {
         number: "06",
         title: "Deployment",
         subtitle: "DevOps Agent",
+
         status: getFutureStageStatus("DEPLOYMENT"),
       },
     ];
@@ -276,9 +328,16 @@ const ProjectDetailsPage = () => {
     setPoState(state);
 
     if (state.status === "COMPLETED") {
-      await refreshWorkspace();
-
+      /*
+       * Scope generation is now detached.
+       * We move to Scope immediately.
+       *
+       * Socket events will keep refreshing
+       * this panel as Scope starts/finishes.
+       */
       setSelectedStepId("PRODUCT_SCOPE");
+
+      await refreshWorkspace();
     }
   };
 
@@ -292,13 +351,16 @@ const ProjectDetailsPage = () => {
     setScopeState(state);
 
     /*
-     * Backend orchestration has already
-     * generated Architecture before this
-     * request returns.
+     * Architecture generation is detached.
+     *
+     * The backend has already moved the
+     * project to ARCHITECTURE/RUNNING,
+     * but the architecture proposal may
+     * not exist yet.
      */
-    await refreshWorkspace();
-
     setSelectedStepId("ARCHITECTURE");
+
+    await refreshWorkspace();
   };
 
   const handleArchitectureChanged = (
@@ -312,17 +374,21 @@ const ProjectDetailsPage = () => {
   ): Promise<void> => {
     setArchitectureState(state);
 
-    await refreshWorkspace();
-
     setSelectedStepId("DEVELOPMENT");
+
+    await refreshWorkspace();
   };
 
   const renderSelectedStage = () => {
+    if (!project) {
+      return null;
+    }
+
     switch (activeStepId) {
       case "REQUIREMENT_DISCOVERY":
         return (
           <PoWorkflowPanel
-            project={project!}
+            project={project}
             state={poState}
             onStateChanged={(state) => void handlePoStateChanged(state)}
           />
@@ -331,7 +397,7 @@ const ProjectDetailsPage = () => {
       case "PRODUCT_SCOPE":
         return (
           <ScopeReviewPanel
-            project={project!}
+            project={project}
             poState={poState}
             scopeState={scopeState}
             onScopeChanged={handleScopeChanged}
@@ -342,7 +408,7 @@ const ProjectDetailsPage = () => {
       case "ARCHITECTURE":
         return (
           <ArchitectureReviewPanel
-            project={project!}
+            project={project}
             architectureState={architectureState}
             onArchitectureChanged={handleArchitectureChanged}
             onArchitectureApproved={handleArchitectureApproved}
@@ -362,6 +428,20 @@ const ProjectDetailsPage = () => {
         return null;
     }
   };
+
+  if (!projectId) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-5 text-sm text-destructive">
+          Project ID is missing.
+        </div>
+
+        <Button variant="outline" onClick={() => navigate("/projects")}>
+          Back to projects
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -422,7 +502,13 @@ const ProjectDetailsPage = () => {
               <p className="text-xs text-muted-foreground">Current stage</p>
 
               <p className="mt-1 text-sm font-medium">
-                {selectedStep?.title ?? project.currentStage}
+                {project.currentStage
+                  .toLowerCase()
+                  .split("_")
+                  .map(
+                    (word) => `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
+                  )
+                  .join(" ")}
               </p>
             </div>
 

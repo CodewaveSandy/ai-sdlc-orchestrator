@@ -1,8 +1,9 @@
-import type { Server } from "node:http";
+import { createServer, type Server } from "node:http";
 
 import app from "./app";
 import { connectDatabase, disconnectDatabase } from "./config/database";
 import { env } from "./config/env";
+import { closeSocketServer, initializeSocketServer } from "./realtime/socket";
 
 let server: Server | null = null;
 
@@ -10,7 +11,11 @@ const startServer = async (): Promise<void> => {
   try {
     await connectDatabase();
 
-    server = app.listen(env.port, () => {
+    server = createServer(app);
+
+    initializeSocketServer(server);
+
+    server.listen(env.port, () => {
       console.log(
         `AI SDLC Orchestrator API running on http://localhost:${env.port}`,
       );
@@ -29,27 +34,35 @@ const startServer = async (): Promise<void> => {
 const shutdown = async (signal: string): Promise<void> => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
 
-  if (server) {
-    server.close(async () => {
-      try {
-        await disconnectDatabase();
-        process.exit(0);
-      } catch (error) {
-        console.error("Error while shutting down");
+  try {
+    await closeSocketServer();
 
-        if (error instanceof Error) {
-          console.error(error.message);
-        }
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server?.close((error) => {
+          if (error) {
+            reject(error);
 
-        process.exit(1);
-      }
-    });
+            return;
+          }
 
-    return;
+          resolve();
+        });
+      });
+    }
+
+    await disconnectDatabase();
+
+    process.exit(0);
+  } catch (error) {
+    console.error("Error while shutting down");
+
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+
+    process.exit(1);
   }
-
-  await disconnectDatabase();
-  process.exit(0);
 };
 
 process.on("SIGINT", () => {

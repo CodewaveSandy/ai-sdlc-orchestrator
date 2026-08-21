@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import CreateProjectForm from "@/components/projects/CreateProjectForm";
 import ProjectCard from "@/components/projects/ProjectCard";
 import { Card, CardContent } from "@/components/ui/card";
+import { useProjectsRealtime } from "@/hooks/useProjectsRealtime";
 import { getProjects } from "@/services/project.service";
 import type { Project } from "@/types/project.types";
 
@@ -13,10 +14,25 @@ const ProjectsPage = () => {
 
   const [error, setError] = useState<string | null>(null);
 
+  const refreshProjects = useCallback(async (): Promise<void> => {
+    try {
+      const data = await getProjects();
+
+      setProjects(data);
+      setError(null);
+    } catch (refreshError) {
+      console.error("Failed to refresh projects", refreshError);
+    }
+  }, []);
+
+  useProjectsRealtime({
+    onRefresh: refreshProjects,
+  });
+
   useEffect(() => {
     let isCancelled = false;
 
-    const fetchProjects = async (): Promise<void> => {
+    const fetchInitialProjects = async (): Promise<void> => {
       try {
         const data = await getProjects();
 
@@ -43,7 +59,7 @@ const ProjectsPage = () => {
       }
     };
 
-    void fetchProjects();
+    void fetchInitialProjects();
 
     return () => {
       isCancelled = true;

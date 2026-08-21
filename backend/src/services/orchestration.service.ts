@@ -1,4 +1,9 @@
 import type { PoRequirementAnalysis } from "../agents/po/po.schemas";
+import {
+  publishAgentRunUpdated,
+  publishProjectUpdated,
+  publishWorkflowUpdated,
+} from "../realtime/realtime.publisher";
 import type { ArchitectureWorkflowState } from "../types/architecture.types";
 import type { ScopeWorkflowState } from "../types/scope.types";
 import {
@@ -17,22 +22,53 @@ import {
   reviseProjectScope,
 } from "./scope.service";
 
+const runDetached = (operation: () => Promise<void>, context: string): void => {
+  void operation().catch((error: unknown) => {
+    console.error(`Detached orchestration failed: ${context}`, error);
+  });
+};
+
 export const startScopeGeneration = async (
   projectId: string,
 ): Promise<ScopeWorkflowState> => {
   await setProjectWorkflowStatus(projectId, "RUNNING");
+
+  publishWorkflowUpdated(projectId, "SCOPE_UPDATED");
 
   try {
     const state = await generateProjectScope(projectId);
 
     await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
 
+    publishAgentRunUpdated({
+      projectId,
+      reason: "SCOPE_UPDATED",
+      occurredAt: new Date().toISOString(),
+      agentType: "PRODUCT_OWNER",
+      taskType: "SCOPE_GENERATION",
+      status: state.status,
+    });
+
+    publishWorkflowUpdated(projectId, "SCOPE_UPDATED");
+
+    publishProjectUpdated(projectId, "PROJECT_UPDATED");
+
     return state;
   } catch (error) {
     await setProjectWorkflowStatus(projectId, "FAILED");
 
+    publishWorkflowUpdated(projectId, "WORKFLOW_FAILED");
+
+    publishProjectUpdated(projectId, "WORKFLOW_FAILED");
+
     throw error;
   }
+};
+
+export const startScopeGenerationDetached = (projectId: string): void => {
+  runDetached(async () => {
+    await startScopeGeneration(projectId);
+  }, `scope generation for project ${projectId}`);
 };
 
 export const handleRequirementAnalysisOutcome = async (
@@ -42,10 +78,23 @@ export const handleRequirementAnalysisOutcome = async (
   if (analysis.decision === "NEEDS_CLARIFICATION") {
     await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
 
+    publishWorkflowUpdated(projectId, "REQUIREMENT_UPDATED");
+
+    publishProjectUpdated(projectId, "PROJECT_UPDATED");
+
     return;
   }
 
-  await startScopeGeneration(projectId);
+  /*
+   * Requirement analysis is complete.
+   *
+   * Scope generation continues asynchronously
+   * so the clarification/requirement HTTP
+   * request does not wait for another AI run.
+   */
+  publishWorkflowUpdated(projectId, "REQUIREMENT_UPDATED");
+
+  startScopeGenerationDetached(projectId);
 };
 
 export const reviseScopeAndContinue = async (
@@ -55,14 +104,33 @@ export const reviseScopeAndContinue = async (
 ): Promise<ScopeWorkflowState> => {
   await setProjectWorkflowStatus(projectId, "RUNNING");
 
+  publishWorkflowUpdated(projectId, "SCOPE_UPDATED");
+
   try {
     const state = await reviseProjectScope(projectId, agentRunId, feedback);
 
     await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
 
+    publishAgentRunUpdated({
+      projectId,
+      reason: "SCOPE_UPDATED",
+      occurredAt: new Date().toISOString(),
+      agentType: "PRODUCT_OWNER",
+      taskType: "SCOPE_GENERATION",
+      status: state.status,
+    });
+
+    publishWorkflowUpdated(projectId, "SCOPE_UPDATED");
+
+    publishProjectUpdated(projectId);
+
     return state;
   } catch (error) {
     await setProjectWorkflowStatus(projectId, "FAILED");
+
+    publishWorkflowUpdated(projectId, "WORKFLOW_FAILED");
+
+    publishProjectUpdated(projectId, "WORKFLOW_FAILED");
 
     throw error;
   }
@@ -73,17 +141,42 @@ export const startArchitecture = async (
 ): Promise<ArchitectureWorkflowState> => {
   await setProjectWorkflowStatus(projectId, "RUNNING");
 
+  publishWorkflowUpdated(projectId, "ARCHITECTURE_UPDATED");
+
   try {
     const state = await generateProjectArchitecture(projectId);
 
     await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
 
+    publishAgentRunUpdated({
+      projectId,
+      reason: "ARCHITECTURE_UPDATED",
+      occurredAt: new Date().toISOString(),
+      agentType: "ARCHITECT",
+      taskType: "ARCHITECTURE_DESIGN",
+      status: state.status,
+    });
+
+    publishWorkflowUpdated(projectId, "ARCHITECTURE_UPDATED");
+
+    publishProjectUpdated(projectId);
+
     return state;
   } catch (error) {
     await setProjectWorkflowStatus(projectId, "FAILED");
 
+    publishWorkflowUpdated(projectId, "WORKFLOW_FAILED");
+
+    publishProjectUpdated(projectId, "WORKFLOW_FAILED");
+
     throw error;
   }
+};
+
+export const startArchitectureDetached = (projectId: string): void => {
+  runDetached(async () => {
+    await startArchitecture(projectId);
+  }, `architecture generation for project ${projectId}`);
 };
 
 export const approveScopeAndContinue = async (
@@ -94,7 +187,25 @@ export const approveScopeAndContinue = async (
 
   await completeProductDiscovery(projectId);
 
-  await startArchitecture(projectId);
+  publishAgentRunUpdated({
+    projectId,
+    reason: "SCOPE_UPDATED",
+    occurredAt: new Date().toISOString(),
+    agentType: "PRODUCT_OWNER",
+    taskType: "SCOPE_GENERATION",
+    status: "COMPLETED",
+  });
+
+  publishWorkflowUpdated(projectId, "ARCHITECTURE_UPDATED");
+
+  publishProjectUpdated(projectId);
+
+  /*
+   * Do not block the scope approval
+   * HTTP request while GPT generates
+   * Architecture.
+   */
+  startArchitectureDetached(projectId);
 
   return state;
 };
@@ -106,6 +217,8 @@ export const reviseArchitectureAndContinue = async (
 ): Promise<ArchitectureWorkflowState> => {
   await setProjectWorkflowStatus(projectId, "RUNNING");
 
+  publishWorkflowUpdated(projectId, "ARCHITECTURE_UPDATED");
+
   try {
     const state = await reviseProjectArchitecture(
       projectId,
@@ -115,9 +228,26 @@ export const reviseArchitectureAndContinue = async (
 
     await setProjectWorkflowStatus(projectId, "WAITING_FOR_HUMAN");
 
+    publishAgentRunUpdated({
+      projectId,
+      reason: "ARCHITECTURE_UPDATED",
+      occurredAt: new Date().toISOString(),
+      agentType: "ARCHITECT",
+      taskType: "ARCHITECTURE_DESIGN",
+      status: state.status,
+    });
+
+    publishWorkflowUpdated(projectId, "ARCHITECTURE_UPDATED");
+
+    publishProjectUpdated(projectId);
+
     return state;
   } catch (error) {
     await setProjectWorkflowStatus(projectId, "FAILED");
+
+    publishWorkflowUpdated(projectId, "WORKFLOW_FAILED");
+
+    publishProjectUpdated(projectId, "WORKFLOW_FAILED");
 
     throw error;
   }
@@ -131,10 +261,23 @@ export const approveArchitectureAndContinue = async (
 
   await completeArchitecture(projectId);
 
+  publishAgentRunUpdated({
+    projectId,
+    reason: "ARCHITECTURE_UPDATED",
+    occurredAt: new Date().toISOString(),
+    agentType: "ARCHITECT",
+    taskType: "ARCHITECTURE_DESIGN",
+    status: "COMPLETED",
+  });
+
+  publishWorkflowUpdated(projectId, "PROJECT_UPDATED");
+
+  publishProjectUpdated(projectId);
+
   /*
-   * When Developer Agent exists:
+   * Future:
    *
-   * await startDevelopment(projectId);
+   * startDevelopmentDetached(projectId);
    */
 
   return state;

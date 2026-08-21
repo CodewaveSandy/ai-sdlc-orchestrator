@@ -137,8 +137,11 @@ export const completeProductDiscovery = async (
     {
       $set: {
         status: "IN_PROGRESS",
+
         currentStage: "ARCHITECTURE",
+
         workflowStatus: "RUNNING",
+
         progress: 15,
       },
     },
@@ -163,8 +166,16 @@ export const completeArchitecture = async (
     {
       $set: {
         status: "IN_PROGRESS",
+
         currentStage: "DEVELOPMENT",
-        workflowStatus: "IDLE",
+
+        /*
+         * Development Planning starts
+         * automatically after Architecture
+         * approval.
+         */
+        workflowStatus: "RUNNING",
+
         progress: 30,
       },
     },

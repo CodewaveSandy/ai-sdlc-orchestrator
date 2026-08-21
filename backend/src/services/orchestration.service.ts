@@ -11,6 +11,7 @@ import {
   generateProjectArchitecture,
   reviseProjectArchitecture,
 } from "./architecture.service";
+import { generateProjectDevelopmentPlan } from "./development-planning.service";
 import {
   completeArchitecture,
   completeProductDiscovery,
@@ -66,9 +67,13 @@ export const startScopeGeneration = async (
 };
 
 export const startScopeGenerationDetached = (projectId: string): void => {
-  runDetached(async () => {
-    await startScopeGeneration(projectId);
-  }, `scope generation for project ${projectId}`);
+  runDetached(
+    async () => {
+      await startScopeGeneration(projectId);
+    },
+
+    `scope generation for project ${projectId}`,
+  );
 };
 
 export const handleRequirementAnalysisOutcome = async (
@@ -85,13 +90,6 @@ export const handleRequirementAnalysisOutcome = async (
     return;
   }
 
-  /*
-   * Requirement analysis is complete.
-   *
-   * Scope generation continues asynchronously
-   * so the clarification/requirement HTTP
-   * request does not wait for another AI run.
-   */
   publishWorkflowUpdated(projectId, "REQUIREMENT_UPDATED");
 
   startScopeGenerationDetached(projectId);
@@ -174,9 +172,13 @@ export const startArchitecture = async (
 };
 
 export const startArchitectureDetached = (projectId: string): void => {
-  runDetached(async () => {
-    await startArchitecture(projectId);
-  }, `architecture generation for project ${projectId}`);
+  runDetached(
+    async () => {
+      await startArchitecture(projectId);
+    },
+
+    `architecture generation for project ${projectId}`,
+  );
 };
 
 export const approveScopeAndContinue = async (
@@ -200,11 +202,6 @@ export const approveScopeAndContinue = async (
 
   publishProjectUpdated(projectId);
 
-  /*
-   * Do not block the scope approval
-   * HTTP request while GPT generates
-   * Architecture.
-   */
   startArchitectureDetached(projectId);
 
   return state;
@@ -253,6 +250,53 @@ export const reviseArchitectureAndContinue = async (
   }
 };
 
+export const startDevelopmentPlanning = async (
+  projectId: string,
+): Promise<void> => {
+  await setProjectWorkflowStatus(projectId, "RUNNING");
+
+  publishWorkflowUpdated(projectId, "DEVELOPMENT_UPDATED");
+
+  publishProjectUpdated(projectId);
+
+  try {
+    const state = await generateProjectDevelopmentPlan(projectId);
+
+    await setProjectWorkflowStatus(projectId, "IDLE");
+
+    publishAgentRunUpdated({
+      projectId,
+      reason: "DEVELOPMENT_UPDATED",
+      occurredAt: new Date().toISOString(),
+      agentType: "DEVELOPER",
+      taskType: "DEVELOPMENT_PLANNING",
+      status: state.status,
+    });
+
+    publishWorkflowUpdated(projectId, "DEVELOPMENT_UPDATED");
+
+    publishProjectUpdated(projectId);
+  } catch (error) {
+    await setProjectWorkflowStatus(projectId, "FAILED");
+
+    publishWorkflowUpdated(projectId, "WORKFLOW_FAILED");
+
+    publishProjectUpdated(projectId, "WORKFLOW_FAILED");
+
+    throw error;
+  }
+};
+
+export const startDevelopmentPlanningDetached = (projectId: string): void => {
+  runDetached(
+    async () => {
+      await startDevelopmentPlanning(projectId);
+    },
+
+    `development planning for project ${projectId}`,
+  );
+};
+
 export const approveArchitectureAndContinue = async (
   projectId: string,
   agentRunId: string,
@@ -270,15 +314,11 @@ export const approveArchitectureAndContinue = async (
     status: "COMPLETED",
   });
 
-  publishWorkflowUpdated(projectId, "PROJECT_UPDATED");
+  publishWorkflowUpdated(projectId, "DEVELOPMENT_UPDATED");
 
   publishProjectUpdated(projectId);
 
-  /*
-   * Future:
-   *
-   * startDevelopmentDetached(projectId);
-   */
+  startDevelopmentPlanningDetached(projectId);
 
   return state;
 };

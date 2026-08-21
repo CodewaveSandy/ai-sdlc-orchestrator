@@ -45,3 +45,6 @@ temp/
 
 # Docker / local runtime artifacts
 docker-data/
+
+# Generated files
+generated-workspaces/

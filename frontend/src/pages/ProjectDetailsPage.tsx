@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import ArchitectureReviewPanel from "@/components/projects/ArchitectureReviewPanel";
+import DevelopmentPlanPanel from "@/components/projects/DevelopmentPlanPanel";
 import PendingStage from "@/components/projects/PendingStage";
 import PoWorkflowPanel from "@/components/projects/PoWorkflowPanel";
 import ProjectStageStepper from "@/components/projects/ProjectStageStepper";
@@ -11,10 +12,12 @@ import ScopeReviewPanel from "@/components/projects/ScopeReviewPanel";
 import { Button } from "@/components/ui/button";
 import { useProjectRealtime } from "@/hooks/useProjectRealtime";
 import { getProjectArchitectureState } from "@/services/architecture.service";
+import { getDevelopmentPlanState } from "@/services/development.service";
 import { getPoWorkflowState } from "@/services/po.service";
 import { getProjectById } from "@/services/project.service";
 import { getProjectScopeState } from "@/services/scope.service";
 import type { ArchitectureWorkflowState } from "@/types/architecture.types";
+import type { DevelopmentPlanWorkflowState } from "@/types/development.types";
 import type { PoWorkflowState } from "@/types/po.types";
 import type { Project, ProjectStage } from "@/types/project.types";
 import type { ScopeWorkflowState } from "@/types/scope.types";
@@ -26,10 +29,14 @@ import type {
 
 interface WorkspaceSnapshot {
   project: Project;
+
   poState: PoWorkflowState | null;
+
   scopeState: ScopeWorkflowState | null;
 
   architectureState: ArchitectureWorkflowState | null;
+
+  developmentState: DevelopmentPlanWorkflowState | null;
 }
 
 const stageOrder: ProjectStage[] = [
@@ -42,14 +49,16 @@ const stageOrder: ProjectStage[] = [
   "COMPLETED",
 ];
 
-const getStageIndex = (stage: ProjectStage): number =>
-  stageOrder.indexOf(stage);
+const getStageIndex = (stage: ProjectStage): number => {
+  return stageOrder.indexOf(stage);
+};
 
 const getAgentStatus = (
   status:
     | PoWorkflowState["status"]
     | ScopeWorkflowState["status"]
     | ArchitectureWorkflowState["status"]
+    | DevelopmentPlanWorkflowState["status"]
     | undefined,
 ): WorkspaceStepStatus => {
   switch (status) {
@@ -74,21 +83,25 @@ const getAgentStatus = (
 const loadWorkspaceSnapshot = async (
   projectId: string,
 ): Promise<WorkspaceSnapshot> => {
-  const [project, poState, scopeState, architectureState] = await Promise.all([
-    getProjectById(projectId),
+  const [project, poState, scopeState, architectureState, developmentState] =
+    await Promise.all([
+      getProjectById(projectId),
 
-    getPoWorkflowState(projectId),
+      getPoWorkflowState(projectId),
 
-    getProjectScopeState(projectId),
+      getProjectScopeState(projectId),
 
-    getProjectArchitectureState(projectId),
-  ]);
+      getProjectArchitectureState(projectId),
+
+      getDevelopmentPlanState(projectId),
+    ]);
 
   return {
     project,
     poState,
     scopeState,
     architectureState,
+    developmentState,
   };
 };
 
@@ -108,6 +121,9 @@ const ProjectDetailsPage = () => {
   const [architectureState, setArchitectureState] =
     useState<ArchitectureWorkflowState | null>(null);
 
+  const [developmentState, setDevelopmentState] =
+    useState<DevelopmentPlanWorkflowState | null>(null);
+
   const [selectedStepId, setSelectedStepId] = useState<WorkspaceStepId | null>(
     null,
   );
@@ -125,6 +141,8 @@ const ProjectDetailsPage = () => {
       setScopeState(snapshot.scopeState);
 
       setArchitectureState(snapshot.architectureState);
+
+      setDevelopmentState(snapshot.developmentState);
     },
     [],
   );
@@ -205,6 +223,8 @@ const ProjectDetailsPage = () => {
 
     const architectureStatus = getAgentStatus(architectureState?.status);
 
+    const developmentPlanningStatus = getAgentStatus(developmentState?.status);
+
     const getFutureStageStatus = (stage: ProjectStage): WorkspaceStepStatus => {
       const index = getStageIndex(stage);
 
@@ -235,6 +255,20 @@ const ProjectDetailsPage = () => {
       ? architectureStatus
       : getFutureStageStatus("ARCHITECTURE");
 
+    const resolvedDevelopmentStatus = developmentState
+      ? developmentState.status === "FAILED"
+        ? "FAILED"
+        : developmentState.status === "RUNNING" ||
+            developmentState.status === "CREATED"
+          ? "RUNNING"
+          : getFutureStageStatus("DEVELOPMENT")
+      : project.currentStage === "DEVELOPMENT" &&
+          project.workflowStatus === "RUNNING"
+        ? "RUNNING"
+        : developmentPlanningStatus === "FAILED"
+          ? "FAILED"
+          : getFutureStageStatus("DEVELOPMENT");
+
     return [
       {
         id: "REQUIREMENT_DISCOVERY",
@@ -263,6 +297,7 @@ const ProjectDetailsPage = () => {
         number: "03",
         title: "Architecture",
         subtitle: "Architect Agent",
+
         status: resolvedArchitectureStatus,
       },
 
@@ -272,7 +307,7 @@ const ProjectDetailsPage = () => {
         title: "Development",
         subtitle: "Developer Agent",
 
-        status: getFutureStageStatus("DEVELOPMENT"),
+        status: resolvedDevelopmentStatus,
       },
 
       {
@@ -293,7 +328,7 @@ const ProjectDetailsPage = () => {
         status: getFutureStageStatus("DEPLOYMENT"),
       },
     ];
-  }, [architectureState, poState, project, scopeState]);
+  }, [architectureState, developmentState, poState, project, scopeState]);
 
   const activeStepId = useMemo<WorkspaceStepId>(() => {
     if (selectedStepId) {
@@ -328,13 +363,6 @@ const ProjectDetailsPage = () => {
     setPoState(state);
 
     if (state.status === "COMPLETED") {
-      /*
-       * Scope generation is now detached.
-       * We move to Scope immediately.
-       *
-       * Socket events will keep refreshing
-       * this panel as Scope starts/finishes.
-       */
       setSelectedStepId("PRODUCT_SCOPE");
 
       await refreshWorkspace();
@@ -350,14 +378,6 @@ const ProjectDetailsPage = () => {
   ): Promise<void> => {
     setScopeState(state);
 
-    /*
-     * Architecture generation is detached.
-     *
-     * The backend has already moved the
-     * project to ARCHITECTURE/RUNNING,
-     * but the architecture proposal may
-     * not exist yet.
-     */
     setSelectedStepId("ARCHITECTURE");
 
     await refreshWorkspace();
@@ -376,6 +396,14 @@ const ProjectDetailsPage = () => {
 
     setSelectedStepId("DEVELOPMENT");
 
+    /*
+     * Planning is detached.
+     *
+     * This refresh will usually capture
+     * DEVELOPMENT/RUNNING immediately.
+     * Socket.IO will refresh again when
+     * planning completes.
+     */
     await refreshWorkspace();
   };
 
@@ -416,7 +444,12 @@ const ProjectDetailsPage = () => {
         );
 
       case "DEVELOPMENT":
-        return <PendingStage title="Development" agent="Developer Agent" />;
+        return (
+          <DevelopmentPlanPanel
+            project={project}
+            developmentState={developmentState}
+          />
+        );
 
       case "QA":
         return <PendingStage title="Quality Assurance" agent="QA Agent" />;

@@ -1,6 +1,8 @@
 export const REALTIME_EVENTS = {
   PROJECT_UPDATED: "project:updated",
+
   WORKFLOW_UPDATED: "workflow:updated",
+
   AGENT_RUN_UPDATED: "agent-run:updated",
 } as const;
 
@@ -12,6 +14,7 @@ export const WORKFLOW_UPDATE_REASONS = [
   "REQUIREMENT_UPDATED",
   "SCOPE_UPDATED",
   "ARCHITECTURE_UPDATED",
+  "DEVELOPMENT_UPDATED",
   "AGENT_RUN_UPDATED",
   "WORKFLOW_FAILED",
 ] as const;
@@ -27,7 +30,11 @@ export interface ProjectRealtimeEvent {
 export interface AgentRunRealtimeEvent extends ProjectRealtimeEvent {
   agentType: "PRODUCT_OWNER" | "ARCHITECT" | "DEVELOPER" | "QA" | "DEVOPS";
 
-  taskType: "REQUIREMENT_ANALYSIS" | "SCOPE_GENERATION" | "ARCHITECTURE_DESIGN";
+  taskType:
+    | "REQUIREMENT_ANALYSIS"
+    | "SCOPE_GENERATION"
+    | "ARCHITECTURE_DESIGN"
+    | "DEVELOPMENT_PLANNING";
 
   status: "CREATED" | "RUNNING" | "WAITING_FOR_HUMAN" | "COMPLETED" | "FAILED";
 }

@@ -6,6 +6,11 @@ import {
   reviseArchitectureController,
 } from "../controllers/architecture.controller";
 import {
+  getDevelopmentEnvironmentController,
+  initializeDevelopmentEnvironmentController,
+  runDevelopmentSmokeTestController,
+} from "../controllers/development.controller";
+import {
   createProjectController,
   deleteProjectController,
   getProjectByIdController,
@@ -22,6 +27,8 @@ import {
   getScopeStateController,
   reviseScopeController,
 } from "../controllers/scope.controller";
+
+import { getDevelopmentPlanController } from "../controllers/development-planning.controller";
 
 const projectRouter = Router();
 
@@ -40,10 +47,6 @@ projectRouter.post(
 
 projectRouter.get("/:projectId/po/scope", getScopeStateController);
 
-/*
- * Retained as a debug/fallback endpoint.
- * Normal orchestration does not require it.
- */
 projectRouter.post("/:projectId/po/scope", generateScopeController);
 
 projectRouter.post("/:projectId/po/scope/revise", reviseScopeController);
@@ -61,6 +64,23 @@ projectRouter.post(
   "/:projectId/architecture/approve",
   approveArchitectureController,
 );
+
+projectRouter.get(
+  "/:projectId/development/environment",
+  getDevelopmentEnvironmentController,
+);
+
+projectRouter.post(
+  "/:projectId/development/environment",
+  initializeDevelopmentEnvironmentController,
+);
+
+projectRouter.post(
+  "/:projectId/development/sandbox/smoke-test",
+  runDevelopmentSmokeTestController,
+);
+
+projectRouter.get("/:projectId/development/plan", getDevelopmentPlanController);
 
 projectRouter.delete("/:projectId", deleteProjectController);
 
